@@ -36,6 +36,13 @@
       masked = df.loc[timemask][probe]
       return masked.resample('1T').apply(["first","max","min","last","mean"])
 #+END_SRC
+#+name: getpasturetime
+#+BEGIN_SRC python
+  def getpasturetime(df, probe):
+      mask = (df[probe] >= 62.5)
+      pastrange = df.index[mask].tolist()
+      return pastrange[0], pastrange[-1]
+#+END_SRC
 
 #+name: is_pasteurized
 #+BEGIN_SRC python
@@ -140,36 +147,62 @@
 
 #+RESULTS: gui
 * Generate Graphs
-#+name: generate_graph_full
+#+name: graph_constants
 #+BEGIN_SRC python
-  def generate_graph_full(df, path):
+  MINUTES5 = mdates.MinuteLocator(interval=5)
+  MINUTES10 = mdates.MinuteLocator(interval=10)
+  M_FMT = "%H:%M"
+#+END_SRC
 
-      minutes = mdates.MinuteLocator(interval = 5)
-      m_fmt = mdates.DateFormatter('%H:%M')
-      probe = df[df.columns.get_level_values(0)]
-      batch = os.path.splitext(path)[1].split('.')[0]
+#+name: generate_raw_graph
+#+BEGIN_SRC python
+  def generate_raw_graph(df, probe, batch):
       fig, ax = plt.subplots()
-      ax.title(f"Temperature Values For Batch: {batch}")
-
-      ax.plot(df.index, probe['first'], label="First Value")
-      ax.plot(df.index, probe['mean'], label="Mean Value")
-      ax.plot(df.index, probe['max'], label='Max Value')
-      ax.plot(df.index, probe['min'], label="Min Value")
-      ax.plot(df.index, probe['last'], label='Last Value')
-
-      ax.xlabel('Time')
-      ax.ylabel('Temperature °C')
-
-      ax.xaxis.set_major_locator(minutes)
-      ax.xaxis.set_major_formatter(m_fmt)
-
-      ax.legend()
+      ax.set_title(f"Batch: {batch} Raw Data")
+      ax.plot(df.index, df[probe])
+      ax.set_xlabel('Time')
+      ax.set_ylabel('Temperature °C')
+      ax.xaxis.set_major_locator(MINUTES10)
+      ax.xaxis.set_major_formatter(M_FMT)
       fig.autofmt_xdate()
-      fig.savefig(path+'.png')
+      fig.savefig(f'{batch}/{batch} raw.png')
+      return None
+#+END_SRC
+#+name: generate_min_max
+#+BEGIN_SRC python
+  # coding: utf-8
+  def generate_min_max(rdf, batch, pstart, pstop):
+      fig, (ax1, ax2) = plt.subplots(2,1 sharex=True)
+
+      ax1.plot(rdf['max'], label="Max at Time")
+      ax1.axhline(62.5, label="62.5°C", color="blue")
+      ax1.axhline(64.5, label='64.5°C', color="red")
+      ax1.set_title(f"Batch: {batch} Max Readings")
+      ax1.set_xlabel("Time")
+      ax1.set_xlim(pstart, pstop)
+      ax1.xaxis.set_major_locator(MINUTES5)
+      ax1.xaxis.set_major_formatter(M_FMT)
+      ax1.set_ylabel('Temperature °C')
+      ax1.set_ylim(60,65)
+      ax1.legend()
+
+      ax2.plot(rdf['min'], label="Min at Time")
+      ax2.axhline(62.5, label="62.5°C", color="blue")
+      ax2.axhline(64.5, label='64.5°C', color="red")
+      ax2.set_title(f"Batch: {batch} Max Readings")
+      ax2.set_xlabel("Time")
+      ax2.set_xlim(pstart, pstop)
+      ax2.xaxis.set_major_locator(MINUTES5)
+      ax2.xaxis.set_major_formatter(M_FMT)
+      ax2.set_ylabel('Temperature °C')
+      ax2.set_ylim(60,65)
+      ax2.legend()
+
+      fig.autofmt_xdate()
+      fig.savefig(f'{batch}/{batch} minmax.png')
       return None
 #+END_SRC
 
-#+name:
 * Main
 #+name: imports
 #+BEGIN_SRC python
@@ -186,7 +219,11 @@
 
   <<parse_csv>>
   <<resample_data>>
-  <<generate_graph_full>>
+  <<getpasturetime>>
+  <<is_pasteurized>>
+  <<graph_constants>>
+  <<generate_raw_graph>>
+  <<generate_min_max>>
   <<gui>>
 
   def main():
@@ -217,4 +254,8 @@
           description = "PRG",
           options = {"build_exe": build_exe_options},
           executables = [Executable("main.py", base=base)])
+#+END_SRC
+* Latex Template
+#+BEGIN_SRC latex
+  \usepackage{csvsimple}
 #+END_SRC
