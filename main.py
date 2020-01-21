@@ -1,9 +1,13 @@
-from PyQt5 import QtGui, QtWidgets
 import sys
+import os
+
 import pandas as pd
 import numpy as np
+
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+
+from PyQt5 import QtGui, QtWidgets
 
 def parse_csv(f):
     df = pd.read_csv(f)
@@ -22,28 +26,76 @@ def resample_data(df,start,stop,probe):
     timemask = (df.index > start) & (df.index <= stop)
     masked = df.loc[timemask][probe]
     return masked.resample('1T').apply(["first","max","min","last","mean"])
-# coding: utf-8
-
-def generate_graph(df, path):
-
-    minutes = mdates.MinuteLocator(interval = 5)
-    m_fmt = mdates.DateFormatter('%H:%M')
-    probe = df[df.columns.get_level_values(0)][0]
-    batch = os.path.splitext(path)[1].split('.')[0]
+def getpasturetime(df, probe):
+    mask = (df[probe] >= 62.5)
+    pastrange = df.index[mask].tolist()
+    return pastrange[0], pastrange[-1]
+def is_pasteurized(df):
+    #takes a resampled DataFrame
+    tempmask = (df['min'] > 62.5)
+    return len(df.loc[tempmask]) >= 30
+MINUTES5 = mdates.MinuteLocator(interval=5)
+MINUTES10 = mdates.MinuteLocator(interval=10)
+M_FMT = "%H:%M"
+def generate_raw_graph(df, probe, batch):
     fig, ax = plt.subplots()
-    ax.title(f"Temperature Values For Batch: {batch}")
-
-    ax.plot(df.index, probe['first'], label="Value at Time")
-    ax.plot(df.index, probe['mean'], label="Mean Value of Time")
-    ax.xlabel('Time')
-    ax.ylabel('Temperature °C')
-
-    ax.xaxis.set_major_locator(minutes)
-    ax.xaxis.set_major_formatter(m_fmt)
-
-    ax.legend()
+    ax.set_title(f"Batch: {batch} Raw Data")
+    ax.plot(df.index, df[probe])
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Temperature °C')
+    ax.xaxis.set_major_locator(MINUTES10)
+    ax.xaxis.set_major_formatter(M_FMT)
     fig.autofmt_xdate()
-    fig.savefig(path+'.png')
+    fig.savefig(f'{batch}/{batch} raw.png')
+    return None
+# coding: utf-8
+def generate_min_max(rdf, batch, pstart, pstop):
+    fig, (ax1, ax2) = plt.subplots(2,1 sharex=True)
+
+    ax1.plot(rdf['max'], label="Max at Time")
+    ax1.axhline(62.5, label="62.5°C", color="blue")
+    ax1.axhline(64.5, label='64.5°C', color="red")
+    ax1.set_title(f"Batch: {batch} Max Readings")
+    ax1.set_xlabel("Time")
+    ax1.set_xlim(pstart, pstop)
+    ax1.xaxis.set_major_locator(MINUTES5)
+    ax1.xaxis.set_major_formatter(M_FMT)
+    ax1.set_ylabel('Temperature °C')
+    ax1.set_ylim(60,65)
+    ax1.legend()
+
+    ax2.plot(rdf['min'], label="Min at Time")
+    ax2.axhline(62.5, label="62.5°C", color="blue")
+    ax2.axhline(64.5, label='64.5°C', color="red")
+    ax2.set_title(f"Batch: {batch} Max Readings")
+    ax2.set_xlabel("Time")
+    ax2.set_xlim(pstart, pstop)
+    ax2.xaxis.set_major_locator(MINUTES5)
+    ax2.xaxis.set_major_formatter(M_FMT)
+    ax2.set_ylabel('Temperature °C')
+    ax2.set_ylim(60,65)
+    ax2.legend()
+
+    fig.autofmt_xdate()
+    fig.savefig(f'{batch}/{batch} minmax.png')
+    return None
+def generate_full(df, start, stop, , probe, batch):
+    try:
+        os.mkdir(batch)
+    except FileExistsError:
+        pass
+
+    tmask = (df.index >= start) & (df.index <= stop)
+    pstart, pstop = getpasturetime(df.loc[tmask], probe)
+    df.loc[tmask][probe].to_csv(f'{batch}/{batch} raw.csv')
+    generate_raw_graph(df.loc[tmask], probe, batch)
+    rdf = resample_data(df,start,stop,probe)
+    generate_min_max(rdf,batch,pstart,pstop)
+    cols = ['date','time'] + list(rdf)
+    rdf['date'] = [d.date() for d in rdf.index]
+    rdf['time'] = [d.time() for d in rdf.index]
+    rdf = rdf.loc[:,cols]
+    rdf.to_csv(f'{batch}/{batch}.csv', index=False)
     return None
 class MainWindow(QtWidgets.QWidget):
 

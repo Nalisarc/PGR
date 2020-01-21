@@ -204,14 +204,40 @@
 #+END_SRC
 
 * Main
+#+name: generate_full
+#+BEGIN_SRC python
+  def generate_full(df, start, stop, , probe, batch):
+      try:
+          os.mkdir(batch)
+      except FileExistsError:
+          pass
+
+      tmask = (df.index >= start) & (df.index <= stop)
+      pstart, pstop = getpasturetime(df.loc[tmask], probe)
+      df.loc[tmask][probe].to_csv(f'{batch}/{batch} raw.csv')
+      generate_raw_graph(df.loc[tmask], probe, batch)
+      rdf = resample_data(df,start,stop,probe)
+      generate_min_max(rdf,batch,pstart,pstop)
+      cols = ['date','time'] + list(rdf)
+      rdf['date'] = [d.date() for d in rdf.index]
+      rdf['time'] = [d.time() for d in rdf.index]
+      rdf = rdf.loc[:,cols]
+      rdf.to_csv(f'{batch}/{batch}.csv', index=False)
+      return None
+#+END_SRC
+
 #+name: imports
 #+BEGIN_SRC python
-  from PyQt5 import QtGui, QtWidgets
   import sys
+  import os
+
   import pandas as pd
   import numpy as np
+
   import matplotlib.pyplot as plt
   import matplotlib.dates as mdates
+
+  from PyQt5 import QtGui, QtWidgets
 #+END_SRC
 #+name: main
 #+BEGIN_SRC python :noweb yes :tangle main.py
@@ -224,6 +250,7 @@
   <<graph_constants>>
   <<generate_raw_graph>>
   <<generate_min_max>>
+  <<generate_full>>
   <<gui>>
 
   def main():
