@@ -36,7 +36,7 @@ def is_pasteurized(df):
     return len(df.loc[tempmask]) >= 30
 MINUTES5 = mdates.MinuteLocator(interval=5)
 MINUTES10 = mdates.MinuteLocator(interval=10)
-M_FMT = "%H:%M"
+M_FMT = mdates.DateFormatter("%H:%M")
 def generate_raw_graph(df, probe, batch):
     fig, ax = plt.subplots()
     ax.set_title(f"Batch: {batch} Raw Data")
@@ -50,7 +50,7 @@ def generate_raw_graph(df, probe, batch):
     return None
 # coding: utf-8
 def generate_min_max(rdf, batch, pstart, pstop):
-    fig, (ax1, ax2) = plt.subplots(2,1 sharex=True)
+    fig, (ax1, ax2) = plt.subplots(2,1, sharex=True)
 
     ax1.plot(rdf['max'], label="Max at Time")
     ax1.axhline(62.5, label="62.5°C", color="blue")
@@ -79,23 +79,29 @@ def generate_min_max(rdf, batch, pstart, pstop):
     fig.autofmt_xdate()
     fig.savefig(f'{batch}/{batch} minmax.png')
     return None
-def generate_full(df, start, stop, , probe, batch):
-    try:
-        os.mkdir(batch)
-    except FileExistsError:
-        pass
+def generate_full(df, start, stop, probe, batch):
+    #try:
+    #    os.mkdir(batch)
+    #    print("Created Directory")
+    #except FileExistsError:
+    #    print("Directory already exists, passing")
+    #    pass
 
     tmask = (df.index >= start) & (df.index <= stop)
     pstart, pstop = getpasturetime(df.loc[tmask], probe)
-    df.loc[tmask][probe].to_csv(f'{batch}/{batch} raw.csv')
+    #df.loc[tmask][probe].to_csv(f'{batch}/{batch} raw.csv')
+    #print("raw log generated")
     generate_raw_graph(df.loc[tmask], probe, batch)
+    print("raw graph generated")
     rdf = resample_data(df,start,stop,probe)
     generate_min_max(rdf,batch,pstart,pstop)
+    print("min max graphs generated")
     cols = ['date','time'] + list(rdf)
     rdf['date'] = [d.date() for d in rdf.index]
     rdf['time'] = [d.time() for d in rdf.index]
     rdf = rdf.loc[:,cols]
     rdf.to_csv(f'{batch}/{batch}.csv', index=False)
+    print("resampled data generated")
     return None
 class MainWindow(QtWidgets.QWidget):
 
@@ -171,16 +177,23 @@ class MainWindow(QtWidgets.QWidget):
                 "Multiple Files"
             )
             if outpath:
-                data = resample_data(self.dataframe,
-                                     self.start_datetime.dateTime().toPyDateTime(),
-                                     self.stop_datetime.dateTime().toPyDateTime()
-                                     )
-                data.to_csv(str(outpath[0])+".csv")
-                generate_graph(data, str(outpath[0]))
+                try:
+                    os.mkdir(outpath[0])
+                except FileExistsError:
+                    pass
 
-
-
-
+                os.chdir(outpath[0])
+                batch = os.path.basename(os.path.normpath(outpath[0]))
+                generate_full(self.dataframe,
+                              self.start_datetime.dateTime().toPyDateTime(),
+                              self.stop_datetime.dateTime().toPyDateTime(),
+                              selection[0].text(),
+                              batch)
+                QtWidgets.QMessageBox.information(
+                    self, "Message", "Files successfully created")
+                #except as err:
+                #QtWidgets.QMessageBox.critical(
+                #self, "Message", f"Error Occurred: {err}")
             else:
                 pass
         else:
