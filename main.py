@@ -1,3 +1,4 @@
+#!/bin/env python3
 import sys
 import os
 
@@ -8,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 from PyQt5 import QtGui, QtWidgets
+from pandas.plotting import register_matplotlib_converters
 
 def parse_csv(f):
     df = pd.read_csv(f)
@@ -22,21 +24,42 @@ def parse_csv(f):
     df = df.loc[~df.index.duplicated(keep='first')]
     print(df.index.dtype)
     return df
+
 def resample_data(df,start,stop,probe):
     timemask = (df.index > start) & (df.index <= stop)
     masked = df.loc[timemask][probe]
     return masked.resample('1T').apply(["first","max","min","last","mean"])
+
 def getpasturetime(df, probe):
     mask = (df[probe] >= 62.5)
     pastrange = df.index[mask].tolist()
     return pastrange[0], pastrange[-1]
+
 def is_pasteurized(df):
     #takes a resampled DataFrame
     tempmask = (df['min'] > 62.5)
     return len(df.loc[tempmask]) >= 30
+
+def splitall(path):
+    #Copied from: https://www.oreilly.com/library/view/python-cookbook/0596001673/ch04s16.html
+    allparts = []
+    while 1:
+        parts = os.path.split(path)
+        if parts[0] == path:  # sentinel for absolute paths
+            allparts.insert(0, parts[0])
+            break
+        elif parts[1] == path: # sentinel for relative paths
+            allparts.insert(0, parts[1])
+            break
+        else:
+            path = parts[0]
+            allparts.insert(0, parts[1])
+    return allparts
+
 MINUTES5 = mdates.MinuteLocator(interval=5)
 MINUTES10 = mdates.MinuteLocator(interval=10)
 M_FMT = mdates.DateFormatter("%H:%M")
+
 def generate_raw_graph(df, probe, batch):
     fig, ax = plt.subplots()
     ax.set_title(f"Batch: {batch} Raw Data")
@@ -48,6 +71,7 @@ def generate_raw_graph(df, probe, batch):
     fig.autofmt_xdate()
     fig.savefig(f'{batch}/{batch} raw.png')
     return None
+
 # coding: utf-8
 def generate_min_max(rdf, batch, pstart, pstop):
     fig, (ax1, ax2) = plt.subplots(2,1, sharex=True)
@@ -79,30 +103,46 @@ def generate_min_max(rdf, batch, pstart, pstop):
     fig.autofmt_xdate()
     fig.savefig(f'{batch}/{batch} minmax.png')
     return None
-def generate_full(df, start, stop, probe, batch):
-    #try:
-    #    os.mkdir(batch)
-    #    print("Created Directory")
-    #except FileExistsError:
-    #    print("Directory already exists, passing")
-    #    pass
 
-    tmask = (df.index >= start) & (df.index <= stop)
-    pstart, pstop = getpasturetime(df.loc[tmask], probe)
-    #df.loc[tmask][probe].to_csv(f'{batch}/{batch} raw.csv')
-    #print("raw log generated")
-    generate_raw_graph(df.loc[tmask], probe, batch)
-    print("raw graph generated")
-    rdf = resample_data(df,start,stop,probe)
-    generate_min_max(rdf,batch,pstart,pstop)
-    print("min max graphs generated")
-    cols = ['date','time'] + list(rdf)
-    rdf['date'] = [d.date() for d in rdf.index]
-    rdf['time'] = [d.time() for d in rdf.index]
-    rdf = rdf.loc[:,cols]
-    rdf.to_csv(f'{batch}/{batch}.csv', index=False)
-    print("resampled data generated")
+def generate_full(df, start, stop, probe, path):
+    batch = splitall(path)[-1]
+    parent = os.path.join(*splitall(path)[:-1])
+    with cd(parent):
+        try:
+            os.mkdir(batch)
+        except FileExistsError:
+            pass
+        except:
+            print("Unexpected error:", sys.exc_info()[0])
+            raise
+        tmask = (df.index >= start) & (df.index <= stop)
+        pstart, pstop = getpasturetime(df.loc[tmask], probe)
+        generate_raw_graph(df.loc[tmask], probe, batch)
+        print("raw graph generated")
+        rdf = resample_data(df,start,stop,probe)
+        generate_min_max(rdf,batch,pstart,pstop)
+        print("min max graphs generated")
+        cols = ['date','time'] + list(rdf)
+        rdf['date'] = [d.date() for d in rdf.index]
+        rdf['time'] = [d.time() for d in rdf.index]
+        rdf = rdf.loc[:,cols]
+        rdf.to_csv(f'{batch}/{batch}.csv', index=False)
+        print("resampled data generated")
     return None
+
+class cd:
+    """Context manager for changing the current working directory."""
+    #Copied from [[https://stackoverflow.com/a/13197763][Brian M Hunt]]
+    def __init__(self, newPath):
+        self.newPath = os.path.expanduser(newPath)
+
+    def __enter__(self):
+        self.savedPath = os.getcwd()
+        os.chdir(self.newPath)
+
+    def __exit__(self, etype, value, traceback):
+        os.chdir(self.savedPath)
+
 class MainWindow(QtWidgets.QWidget):
 
     def __init__(self):
@@ -182,13 +222,12 @@ class MainWindow(QtWidgets.QWidget):
                 except FileExistsError:
                     pass
 
-                os.chdir(outpath[0])
-                batch = os.path.basename(os.path.normpath(outpath[0]))
+
                 generate_full(self.dataframe,
                               self.start_datetime.dateTime().toPyDateTime(),
                               self.stop_datetime.dateTime().toPyDateTime(),
                               selection[0].text(),
-                              batch)
+                              outpath[0])
                 QtWidgets.QMessageBox.information(
                     self, "Message", "Files successfully created")
                 #except as err:
