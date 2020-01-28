@@ -11,6 +11,8 @@ import matplotlib.dates as mdates
 from PyQt5 import QtGui, QtWidgets
 from pandas.plotting import register_matplotlib_converters
 
+register_matplotlib_converters(explicit=True)
+
 def parse_csv(f):
     df = pd.read_csv(f)
     print(df.columns)

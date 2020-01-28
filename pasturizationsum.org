@@ -9,6 +9,7 @@
   pandas
   numpy
   matplotlib
+  cx_freeze
 #+END_SRC
 
 * Data Handling and Manipulation
@@ -258,6 +259,8 @@
 #+BEGIN_SRC python :tangle main.py :shebang "#!/bin/env python3" :noweb yes
   <<imports>>
 
+  register_matplotlib_converters(explicit=True)
+
   <<parse_csv>>
 
   <<resample_data>>
@@ -297,7 +300,7 @@
   from cx_Freeze import setup, Executable
 
   # Dependencies are automatically detected, but it might need fine tuning.
-  build_exe_options = {"packages": [""], "excludes": [""]}
+  build_exe_options = {"packages": ["matplotlib","pandas"], "excludes": []}
 
   # GUI applications require a different base on Windows (the default is for a
   # console application).
