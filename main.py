@@ -11,7 +11,7 @@ import matplotlib.dates as mdates
 from PyQt5 import QtGui, QtWidgets
 from pandas.plotting import register_matplotlib_converters
 
-register_matplotlib_converters(explicit=True)
+register_matplotlib_converters()
 
 def parse_csv(f):
     df = pd.read_csv(f)
@@ -93,7 +93,7 @@ def generate_min_max(rdf, batch, pstart, pstop):
     ax2.plot(rdf['min'], label="Min at Time")
     ax2.axhline(62.5, label="62.5°C", color="blue")
     ax2.axhline(64.5, label='64.5°C', color="red")
-    ax2.set_title(f"Batch: {batch} Max Readings")
+    ax2.set_title(f"Batch: {batch} Min Readings")
     ax2.set_xlabel("Time")
     ax2.set_xlim(pstart, pstop)
     ax2.xaxis.set_major_locator(MINUTES5)
@@ -193,21 +193,24 @@ class MainWindow(QtWidgets.QWidget):
             "",
             "Csv Files (*.csv)"
         )[0]
-        if path:
-            self.probe_list.clear()
-            self.infile_name.setText(path.split('/')[-1])
-            self.dataframe = parse_csv(path)
-            for item in self.dataframe.columns:
-                self.probe_list.addItem(item)
+        try:
+            if path:
+                self.probe_list.clear()
+                self.infile_name.setText(path.split('/')[-1])
+                self.dataframe = parse_csv(path)
+                for item in self.dataframe.columns:
+                    self.probe_list.addItem(item)
 
-            self.start_datetime.setDateTime(
-                self.dataframe.index.min().to_pydatetime()
-                )
-            self.stop_datetime.setDateTime(
-                self.dataframe.index.max().to_pydatetime()
-                )
-        else:
-            self.infile_name.setText("No File Selected")
+                    self.start_datetime.setDateTime(
+                        self.dataframe.index.min().to_pydatetime()
+                    )
+                    self.stop_datetime.setDateTime(
+                        self.dataframe.index.max().to_pydatetime()
+                    )
+            else:
+                self.infile_name.setText("No File Selected")
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
     def generate_report(self):
         selection = self.probe_list.selectedItems()
@@ -224,17 +227,17 @@ class MainWindow(QtWidgets.QWidget):
                 except FileExistsError:
                     pass
 
-
-                generate_full(self.dataframe,
+                try:
+                    generate_full(self.dataframe,
                               self.start_datetime.dateTime().toPyDateTime(),
                               self.stop_datetime.dateTime().toPyDateTime(),
                               selection[0].text(),
                               outpath[0])
-                QtWidgets.QMessageBox.information(
-                    self, "Message", "Files successfully created")
-                #except as err:
-                #QtWidgets.QMessageBox.critical(
-                #self, "Message", f"Error Occurred: {err}")
+                    QtWidgets.QMessageBox.information(
+                        self, "Message", "Files successfully created")
+                except Exception as err:
+                    QtWidgets.QMessageBox.critical(
+                        self, "Message", f"Error Occurred: {err}")
             else:
                 pass
         else:
